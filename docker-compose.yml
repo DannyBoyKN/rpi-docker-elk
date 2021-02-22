@@ -1,25 +1,54 @@
-elasticsearch:
-  image: ind3x/rpi-elasticsearch:latest
-  command: elasticsearch -Des.network.host=0.0.0.0
-  ports:
-    - "9200:9200"
-    - "9300:9300"
+version: "3"
 
-logstash:
-  build: logstash/
-  command: logstash -f /etc/logstash/conf.d/logstash.conf
-  volumes:
-    - ./logstash/config:/etc/logstash/conf.d
-  ports:
-    - "5000:5000"
-  links:
-    - elasticsearch
+services:
+  fluentd:
+    build: ./fluentd
+    volumes:
+      - ./fluentd/conf:/fluentd/etc
+    ports:
+      - "127.0.0.1:24224:24224"
+      - "127.0.0.1:24224:24224/udp"
+    depends_on:
+      - elasticsearch
+      
+  elasticsearch:
+    image: ind3x/rpi-elasticsearch:latest
+    environment:
+      - "discovery.type=single-node"
+    command: elasticsearch -Des.network.host=0.0.0.0
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - ./data/elastic:/usr/share/elasticsearch/data
 
-kibana:
-  build: kibana/
-  volumes:
-    - ./kibana/config/:/opt/kibana/config/
-  ports:
-    - "5601:5601"
-  links:
-    - elasticsearch
+  #logstash:
+  #  build: logstash/
+  #  command: logstash -f /etc/logstash/conf.d/logstash.conf
+  #  volumes:
+  #    - ./logstash/config:/etc/logstash/conf.d
+  #  ports:
+  #    - "5000:5000"
+  #  links:
+  #    - elasticsearch
+
+  kibana:
+    build: kibana/
+    volumes:
+      - ./kibana/config/:/opt/kibana/config/
+    ports:
+      - "5601:5601"
+    links:
+      - elasticsearch
+
+  whoami:
+    image: containous/whoami
+    depends_on:
+      - fluentd
+    ports:
+      - "9980:80"
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: localhost:24224
+        tag: web.whoami.logs
